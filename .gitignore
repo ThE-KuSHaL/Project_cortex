@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.cache
+.vite
+*.log
+
+# Local agent/session config
+.claude/
+
+# Scratch art-direction captures
+tools/_ad_*.png
+tools/_shot_*.png
