@@ -190,6 +190,42 @@ select feel like one coherent, intentional system (docs/07 animation + reference
 - **Cost:** two easing constants + one shader term. No new loop, no new uniform. Build and
   chunks unchanged.
 
+**M13 — Real geometry: 100× surface hardware.** _(2026-07-10)_ Per an explicit directive to
+add real 3D *structure* (not more texturing), `SurfaceComponents` was expanded from 2
+instanced families / ~150 parts to **8 families / ~16,000 real seated hardware pieces
+(≈108×)** — large ICs, dense SMD chips, copper vias, connector pads, capacitor cans,
+oscillator crystals, heatsink fins and micro solder beads, each oriented to the surface
+normal:
+- **Architecture-safe scale.** Every family is one `InstancedMesh`, so the whole ~16k-part
+  fabrication is **8 draw calls total** regardless of instance count — draw calls scale with
+  families, not parts. No new system; the existing instancing + `sampleSurface` seat path is
+  reused, with a new per-family flatness tolerance so tiny parts fill the sulci while large
+  chips stay on plateaus.
+- **Tier-scaled + passive.** Tier A gets the full fabrication, Tier B ~45%, Tier C skips the
+  layer. All parts are neutral structural PBR (ceramic / copper / titanium / steel) and
+  **never emit**, so "graphite never glows" and the emissive-routing hierarchy hold.
+- **Rewards zoom.** The orbit zoom floor dropped (2.3 → 1.75) so continuous close inspection
+  actually resolves the parts — far view still reads as silhouette + glow + fine texture;
+  on zoom, thousands of discrete components appear (docs/02, docs/13).
+- **Cost:** ~300k added triangles across 8 draw calls, computed once at mount, no per-frame
+  work. Procedural — zero bundle-size change.
+
+**M14 — Acceptance execution + docs status.** _(2026-07-10)_ Executed
+`docs/13_acceptance_tests.md` as a multi-dimension audit with an adversarial verify pass
+(results in `docs/13_acceptance_results.md`): **60 PASS · 6 PARTIAL · 0 FAIL (1 found, fixed)
+· 3 live-only MANUAL · 0 overturned.** The one real defect — `ErrorBoundary` over-claiming
+shader-compile coverage it structurally can't provide — was fixed with a guarded
+`onBeforeCompile` that degrades to standard PBR on failure. `docs/14_future_expansion.md` is
+a forward-looking roadmap; its requirements on the *current* codebase are met — the
+extension seams exist (`src/future/index.ts`) and its near-term items are already shipped
+(reduced-motion, adaptive quality tiers + FPS downshift, keyboard-first nav). Its
+speculative modes (GitHub / AI assistant / timeline / patents) are intentionally deferred,
+as the doc itself directs ("nothing runs until a mode is actually built").
+
+**Docs status: all 21 specification markdowns executed.** Core specs (00–12) built in
+M1–M7; reference specs art-directed in M8–M13; acceptance (13) executed in M14; future
+roadmap (14) satisfied at the architecture level.
+
 ---
 
 ## Acceptance & audit

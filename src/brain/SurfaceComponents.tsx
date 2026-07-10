@@ -8,6 +8,7 @@ import {
   Matrix4,
   MeshStandardMaterial,
   Object3D,
+  OctahedronGeometry,
   Quaternion,
   Vector3,
 } from 'three'
@@ -15,15 +16,22 @@ import { sampleSurface, type SurfaceSample } from './surfaceSampler'
 import { STRUCTURAL } from '../config/palette'
 
 /**
- * Real close-inspection hardware (docs/04 detail hierarchy, 03_references material 04):
- * surface-mounted ceramic ICs and copper vias seated flush on the brain surface via
- * instancing. Two InstancedMeshes => two draw calls regardless of count. These are
- * passive/neutral (matte ceramic, dull copper) and never emit — the emissive routing
- * stays the shader's job. They live inside the brain group so they float and rotate
- * with it, and they are tier-gated (skipped entirely on Tier C).
+ * Real close-inspection hardware (docs/02 "almost no empty areas… rewards close
+ * inspection"; docs/13 "surface detail visible at multiple zoom levels").
  *
- * The payoff: from far away only the silhouette + glow read; on zoom, discrete chips
- * and vias resolve, rewarding inspection exactly as the spec requires.
+ * This is REAL seated geometry, not texture: eight families of surface-mounted parts —
+ * large ICs, dense SMD chips, copper vias, connector pads, capacitors, oscillator cans,
+ * heatsink fins and micro solder beads — instanced flush against the brain surface with
+ * correct per-part normal orientation. Because every family is one InstancedMesh, the
+ * whole ~16k-part fabrication costs only eight draw calls regardless of instance count.
+ *
+ * All parts are passive structural PBR (ceramic / copper / titanium / steel) and NEVER
+ * emit — emissive routing stays the shader's job so "graphite never glows" holds. They
+ * live inside the brain group (float/rotate with it) and scale down by tier: Tier A gets
+ * the full fabrication, Tier B ~45%, Tier C skips the layer entirely (parent-gated).
+ *
+ * The payoff: from far, only the silhouette + glow read; on zoom, thousands of discrete
+ * components resolve across the whole surface, so inspection is continuously rewarded.
  */
 
 const UP = new Vector3(0, 1, 0)
@@ -50,58 +58,194 @@ function seatMatrix(
   out.copy(obj.matrix)
 }
 
-export function SurfaceComponents({ geometry, count = 130 }: { geometry: BufferGeometry; count?: number }) {
-  const { chipGeo, chipMat, viaGeo, viaMat, chipMatrices, viaMatrices } = useMemo(() => {
-    const samples = sampleSurface(geometry, count, 20260706)
+/** Deterministic per-index hash in [0,1) — stable component layout across reloads. */
+function hash01(i: number, salt: number): number {
+  let x = (i * 2654435761 + salt * 40503) >>> 0
+  x ^= x >>> 15
+  x = Math.imul(x, 0x2c1b3c6d)
+  x ^= x >>> 12
+  return (x >>> 0) / 4294967296
+}
+
+interface Family {
+  key: string
+  /** Base instance count at Tier A. Scaled by the tier budget. */
+  count: number
+  /** Minimum face flatness to accept a seat (1 = only perfectly flat plateaus). */
+  flatness: number
+  /** Deterministic sampler seed — distinct per family so layouts don't collide. */
+  seed: number
+  /** Whether this family participates in the shadow pass (only the larger parts do). */
+  shadow: boolean
+  geometry: () => BufferGeometry
+  material: () => MeshStandardMaterial
+  /** Per-instance scale + surface lift, given a stable random r in [0,1) and index. */
+  place: (r: number, idx: number) => { scale: Vector3; lift: number; spin: number }
+}
+
+const FAMILIES: Family[] = [
+  // 1 — Large ICs: bold ceramic packages on plateaus. Read first on zoom.
+  {
+    key: 'bigIC',
+    count: 420,
+    flatness: 0.9,
+    seed: 20260706,
+    shadow: true,
+    geometry: () => new BoxGeometry(1, 1, 1),
+    material: () => new MeshStandardMaterial({ color: new Color('#2b323c'), metalness: 0.45, roughness: 0.62 }),
+    place: (r, idx) => ({
+      scale: new Vector3(0.048 + r * 0.055, 0.018, 0.048 + ((idx * 40503) % 100) / 100 * 0.055),
+      lift: 0.009,
+      spin: r * Math.PI,
+    }),
+  },
+  // 2 — Dense SMD chips: the small-part fill that removes empty areas.
+  {
+    key: 'smdChip',
+    count: 4200,
+    flatness: 0.72,
+    seed: 771113,
+    shadow: false,
+    geometry: () => new BoxGeometry(1, 1, 1),
+    material: () => new MeshStandardMaterial({ color: new Color('#4b5563'), metalness: 0.55, roughness: 0.48 }),
+    place: (r, idx) => ({
+      scale: new Vector3(0.016 + r * 0.026, 0.013, 0.016 + hash01(idx, 7) * 0.028),
+      lift: 0.007,
+      spin: hash01(idx, 3) * Math.PI,
+    }),
+  },
+  // 3 — Copper vias: plated through-holes, metallic, everywhere.
+  {
+    key: 'via',
+    count: 3200,
+    flatness: 0.6,
+    seed: 550099,
+    shadow: false,
+    geometry: () => new CylinderGeometry(1, 1, 1, 10),
+    material: () => new MeshStandardMaterial({ color: new Color(STRUCTURAL.copper), metalness: 0.92, roughness: 0.4 }),
+    place: (r) => {
+      const rad = 0.005 + r * 0.006
+      return { scale: new Vector3(rad, 0.009, rad), lift: 0.004, spin: 0 }
+    },
+  },
+  // 4 — Connector pads: wide flat landing discs, brighter copper.
+  {
+    key: 'pad',
+    count: 2200,
+    flatness: 0.8,
+    seed: 918273,
+    shadow: false,
+    geometry: () => new CylinderGeometry(1, 1, 1, 14),
+    material: () => new MeshStandardMaterial({ color: new Color('#8a5a2c'), metalness: 0.85, roughness: 0.5 }),
+    place: (r) => {
+      const rad = 0.014 + r * 0.013
+      return { scale: new Vector3(rad, 0.003, rad), lift: 0.0025, spin: 0 }
+    },
+  },
+  // 5 — Capacitors / tall cans: vertical steel components that catch rim light.
+  {
+    key: 'cap',
+    count: 820,
+    flatness: 0.85,
+    seed: 336699,
+    shadow: true,
+    geometry: () => new CylinderGeometry(1, 1, 1, 12),
+    material: () => new MeshStandardMaterial({ color: new Color(STRUCTURAL.steel), metalness: 0.78, roughness: 0.38 }),
+    place: (r, idx) => {
+      const rad = 0.01 + r * 0.007
+      return { scale: new Vector3(rad, 0.03 + hash01(idx, 11) * 0.025, rad), lift: 0.016, spin: 0 }
+    },
+  },
+  // 6 — Oscillator crystals: faceted octahedra, reflective steel, sparse accents.
+  {
+    key: 'osc',
+    count: 700,
+    flatness: 0.8,
+    seed: 145263,
+    shadow: true,
+    geometry: () => new OctahedronGeometry(1, 0),
+    material: () => new MeshStandardMaterial({ color: new Color('#6b7784'), metalness: 0.85, roughness: 0.3 }),
+    place: (r, idx) => {
+      const s = 0.014 + r * 0.012
+      return { scale: new Vector3(s, s * 0.7, s), lift: 0.01, spin: hash01(idx, 5) * Math.PI }
+    },
+  },
+  // 7 — Heatsink fins: thin titanium plates, structural, catch shadow.
+  {
+    key: 'heatsink',
+    count: 560,
+    flatness: 0.88,
+    seed: 604020,
+    shadow: true,
+    geometry: () => new BoxGeometry(1, 1, 1),
+    material: () => new MeshStandardMaterial({ color: new Color(STRUCTURAL.titanium), metalness: 0.8, roughness: 0.36 }),
+    place: (r, idx) => ({
+      scale: new Vector3(0.05 + r * 0.03, 0.022 + hash01(idx, 9) * 0.014, 0.007),
+      lift: 0.012,
+      spin: hash01(idx, 13) * Math.PI,
+    }),
+  },
+  // 8 — Micro solder beads: the finest tier of fill, tucked into sulci everywhere.
+  {
+    key: 'bead',
+    count: 4200,
+    flatness: 0.5,
+    seed: 987321,
+    shadow: false,
+    geometry: () => new OctahedronGeometry(1, 0),
+    material: () => new MeshStandardMaterial({ color: new Color('#5c3c20'), metalness: 0.7, roughness: 0.55 }),
+    place: (r) => {
+      const s = 0.005 + r * 0.004
+      return { scale: new Vector3(s, s, s), lift: 0.002, spin: 0 }
+    },
+  },
+]
+
+interface BuiltFamily {
+  key: string
+  geometry: BufferGeometry
+  material: MeshStandardMaterial
+  matrices: Matrix4[]
+  shadow: boolean
+}
+
+export function SurfaceComponents({
+  geometry,
+  budget = 1,
+}: {
+  geometry: BufferGeometry
+  /** Tier scale on all instance counts (Tier A = 1, Tier B ≈ 0.45). */
+  budget?: number
+}) {
+  const built = useMemo<BuiltFamily[]>(() => {
     const obj = new Object3D()
     const m = new Matrix4()
     const q = new Quaternion()
     const p = new Vector3()
 
-    // ~60% chips, ~40% vias.
-    const chipCount = Math.floor(samples.length * 0.6)
-    const chips: Matrix4[] = []
-    const vias: Matrix4[] = []
-
-    samples.forEach((s, idx) => {
-      const r = ((idx * 2654435761) >>> 0) / 4294967296 // stable per-index jitter
-      if (idx < chipCount) {
-        const w = 0.03 + r * 0.045
-        const l = 0.03 + ((idx * 40503) % 100) / 100 * 0.05
-        seatMatrix(s, new Vector3(w, 0.012, l), 0.006, r * Math.PI, m, q, p, obj)
-        chips.push(m.clone())
-      } else {
-        const rad = 0.006 + r * 0.006
-        seatMatrix(s, new Vector3(rad, 0.01, rad), 0.004, 0, m, q, p, obj)
-        vias.push(m.clone())
-      }
+    return FAMILIES.map((fam) => {
+      const count = Math.max(1, Math.round(fam.count * budget))
+      const samples = sampleSurface(geometry, count, fam.seed, fam.flatness)
+      const matrices: Matrix4[] = []
+      samples.forEach((s, idx) => {
+        const r = hash01(idx, fam.seed & 0xffff)
+        const { scale, lift, spin } = fam.place(r, idx)
+        seatMatrix(s, scale, lift, spin, m, q, p, obj)
+        matrices.push(m.clone())
+      })
+      return { key: fam.key, geometry: fam.geometry(), material: fam.material(), matrices, shadow: fam.shadow }
     })
+  }, [geometry, budget])
 
-    const chipGeo = new BoxGeometry(1, 1, 1)
-    const chipMat = new MeshStandardMaterial({
-      color: new Color('#1a1e24'), // matte charcoal ceramic
-      metalness: 0.2,
-      roughness: 0.85,
-    })
-    const viaGeo = new CylinderGeometry(1, 1, 1, 10)
-    const viaMat = new MeshStandardMaterial({
-      color: new Color(STRUCTURAL.copper),
-      metalness: 0.9,
-      roughness: 0.42,
-    })
-
-    return { chipGeo, chipMat, viaGeo, viaMat, chipMatrices: chips, viaMatrices: vias }
-  }, [geometry, count])
-
-  // Release the instanced geometries/materials when this remounts or unmounts.
+  // Release every family's geometry + material on remount / unmount.
   useEffect(() => {
     return () => {
-      chipGeo.dispose()
-      chipMat.dispose()
-      viaGeo.dispose()
-      viaMat.dispose()
+      built.forEach((b) => {
+        b.geometry.dispose()
+        b.material.dispose()
+      })
     }
-  }, [chipGeo, chipMat, viaGeo, viaMat])
+  }, [built])
 
   const setRef = (matrices: Matrix4[]) => (inst: InstancedMesh | null) => {
     if (!inst) return
@@ -112,17 +256,15 @@ export function SurfaceComponents({ geometry, count = 130 }: { geometry: BufferG
 
   return (
     <>
-      <instancedMesh
-        ref={setRef(chipMatrices)}
-        args={[chipGeo, chipMat, chipMatrices.length]}
-        castShadow
-        frustumCulled={false}
-      />
-      <instancedMesh
-        ref={setRef(viaMatrices)}
-        args={[viaGeo, viaMat, viaMatrices.length]}
-        frustumCulled={false}
-      />
+      {built.map((b) => (
+        <instancedMesh
+          key={b.key}
+          ref={setRef(b.matrices)}
+          args={[b.geometry, b.material, b.matrices.length]}
+          castShadow={b.shadow}
+          frustumCulled={false}
+        />
+      ))}
     </>
   )
 }

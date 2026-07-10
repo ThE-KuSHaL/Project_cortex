@@ -17,7 +17,12 @@ export interface SurfaceSample {
  * rather than bridging deep sulci — approximated by rejecting samples whose triangle
  * normal deviates too far from its vertex-normal average (creased faces).
  */
-export function sampleSurface(geometry: BufferGeometry, count: number, seed = 1337): SurfaceSample[] {
+export function sampleSurface(
+  geometry: BufferGeometry,
+  count: number,
+  seed = 1337,
+  minFlatness = 0.86,
+): SurfaceSample[] {
   const pos = geometry.getAttribute('position')
   const norm = geometry.getAttribute('normal')
   const region = geometry.getAttribute('aRegionId')
@@ -89,7 +94,7 @@ export function sampleSurface(geometry: BufferGeometry, count: number, seed = 13
       nb.fromBufferAttribute(norm, i + 1)
       nc.fromBufferAttribute(norm, i + 2)
       vertN.copy(na).add(nb).add(nc).normalize()
-      if (faceN.dot(vertN) < 0.86) continue
+      if (faceN.dot(vertN) < minFlatness) continue
     }
 
     // Uniform barycentric point in the triangle.

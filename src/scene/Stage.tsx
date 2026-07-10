@@ -38,7 +38,7 @@ export function Stage({ particleCount }: { particleCount: number }) {
         dampingFactor={0.06}
         rotateSpeed={0.6}
         zoomSpeed={0.7}
-        minDistance={2.3}
+        minDistance={1.75}
         maxDistance={8}
         maxPolarAngle={Math.PI * 0.86}
         target={[0, 0, 0]}

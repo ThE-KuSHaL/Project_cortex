@@ -46,7 +46,10 @@ export function BrainMesh() {
   }, [scene])
   const { material, uniforms } = useMemo(() => createBrainMaterial(), [])
   // Real surface hardware rewards zoom; skipped on the lowest tier (level 2 = Tier C).
-  const showComponents = useQuality((s) => s.level < 2)
+  // Tier A (level 0) gets the full ~16k-part fabrication, Tier B (level 1) ~45%.
+  const componentLevel = useQuality((s) => s.level)
+  const showComponents = componentLevel < 2
+  const componentBudget = componentLevel === 0 ? 1 : 0.45
 
   const groupRef = useRef<Group>(null)
   const activeEase = useRef(new Float32Array(REGION_COUNT))
@@ -150,7 +153,7 @@ export function BrainMesh() {
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
       />
-      {showComponents && <SurfaceComponents geometry={processed.geometry} count={150} />}
+      {showComponents && <SurfaceComponents geometry={processed.geometry} budget={componentBudget} />}
       <HoverLabel />
     </group>
   )

@@ -201,24 +201,32 @@ export function createBrainMaterial(): BrainMaterialBundle {
   })
 
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uniforms.uTime
-    shader.uniforms.uColors = uniforms.uColors
-    shader.uniforms.uActive = uniforms.uActive
-    shader.uniforms.uHover = uniforms.uHover
-    shader.uniforms.uBrainActivity = uniforms.uBrainActivity
-    shader.uniforms.uSync = uniforms.uSync
-    shader.uniforms.uEmissiveGain = uniforms.uEmissiveGain
-    shader.uniforms.uMicroDetail = uniforms.uMicroDetail
+    // Guard the shader patch (docs/13 "failed shader compilation handled"): if string
+    // injection ever throws, fall back to the un-patched standard PBR material so the
+    // brain still renders as graphite instead of vanishing. Real graceful degradation —
+    // the React ErrorBoundary cannot catch render-loop compile errors, this can.
+    try {
+      shader.uniforms.uTime = uniforms.uTime
+      shader.uniforms.uColors = uniforms.uColors
+      shader.uniforms.uActive = uniforms.uActive
+      shader.uniforms.uHover = uniforms.uHover
+      shader.uniforms.uBrainActivity = uniforms.uBrainActivity
+      shader.uniforms.uSync = uniforms.uSync
+      shader.uniforms.uEmissiveGain = uniforms.uEmissiveGain
+      shader.uniforms.uMicroDetail = uniforms.uMicroDetail
 
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${VERTEX_HEAD}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERTEX_BODY}`)
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${VERTEX_HEAD}`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERTEX_BODY}`)
 
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAGMENT_HEAD}`)
-      .replace('#include <map_fragment>', `#include <map_fragment>\n${FRAGMENT_DIFFUSE}`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${FRAGMENT_ROUGHNESS}`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`)
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${FRAGMENT_HEAD}`)
+        .replace('#include <map_fragment>', `#include <map_fragment>\n${FRAGMENT_DIFFUSE}`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${FRAGMENT_ROUGHNESS}`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`)
+    } catch (err) {
+      console.error('[Project Cortex] shader patch failed — falling back to standard PBR:', err)
+    }
   }
 
   material.customProgramCacheKey = () => 'cortex-master-material-v7'

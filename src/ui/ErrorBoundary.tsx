@@ -1,8 +1,11 @@
 import { Component, type ReactNode } from 'react'
 
 /**
- * Graceful failure (docs/13 error handling): a failed GLB load or shader compile
- * surfaces a calm message instead of a blank screen or a crashed page.
+ * Graceful failure (docs/13 error handling): catches React render-phase failures — a
+ * missing/failed GLB load, a WebGL-unavailable throw, or any component error — and
+ * surfaces a calm message instead of a blank screen or a crashed page. (Render-loop
+ * shader-compile failures are handled separately, in masterMaterial's guarded patch,
+ * since a React boundary cannot catch errors thrown outside the render phase.)
  */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
