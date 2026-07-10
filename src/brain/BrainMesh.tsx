@@ -66,6 +66,7 @@ export function BrainMesh() {
     brainRuntime.anchors = processed.regionCentroids.map((c) =>
       c.clone().add(c.clone().normalize().multiplyScalar(0.14)),
     )
+    brainRuntime.anchorNormals = processed.regionCentroids.map((c) => c.clone().normalize())
     brainRuntime.ready = true
     useCortex.getState().setReady(true)
     return () => {

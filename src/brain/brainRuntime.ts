@@ -10,10 +10,15 @@ export const brainRuntime: {
   group: Group | null
   centroids: Vector3[]
   anchors: Vector3[]
+  /** Local-space outward unit direction per region (centroid normalized from origin) —
+   * used to test whether a region's anchor currently faces the camera or is occluded by
+   * the brain itself, so its connector line/dot hides when rotated out of view. */
+  anchorNormals: Vector3[]
   ready: boolean
 } = {
   group: null,
   centroids: [],
   anchors: [],
+  anchorNormals: [],
   ready: false,
 }

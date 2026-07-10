@@ -87,7 +87,7 @@ const FAMILIES: Family[] = [
   // 1 — Large ICs: bold ceramic packages on plateaus. Read first on zoom.
   {
     key: 'bigIC',
-    count: 420,
+    count: 30,
     flatness: 0.9,
     seed: 20260706,
     shadow: true,
@@ -99,10 +99,10 @@ const FAMILIES: Family[] = [
       spin: r * Math.PI,
     }),
   },
-  // 2 — Dense SMD chips: the small-part fill that removes empty areas.
+  // 2 — SMD chips: sparse accent fill, not dense.
   {
     key: 'smdChip',
-    count: 4200,
+    count: 50,
     flatness: 0.72,
     seed: 771113,
     shadow: false,
@@ -114,10 +114,10 @@ const FAMILIES: Family[] = [
       spin: hash01(idx, 3) * Math.PI,
     }),
   },
-  // 3 — Copper vias: plated through-holes, metallic, everywhere.
+  // 3 — Copper vias: sparse metallic accents.
   {
     key: 'via',
-    count: 3200,
+    count: 40,
     flatness: 0.6,
     seed: 550099,
     shadow: false,
@@ -128,10 +128,10 @@ const FAMILIES: Family[] = [
       return { scale: new Vector3(rad, 0.009, rad), lift: 0.004, spin: 0 }
     },
   },
-  // 4 — Connector pads: wide flat landing discs, brighter copper.
+  // 4 — Connector pads: sparse landing points.
   {
     key: 'pad',
-    count: 2200,
+    count: 25,
     flatness: 0.8,
     seed: 918273,
     shadow: false,
@@ -142,10 +142,10 @@ const FAMILIES: Family[] = [
       return { scale: new Vector3(rad, 0.003, rad), lift: 0.0025, spin: 0 }
     },
   },
-  // 5 — Capacitors / tall cans: vertical steel components that catch rim light.
+  // 5 — Capacitors: sparse tall accents.
   {
     key: 'cap',
-    count: 820,
+    count: 20,
     flatness: 0.85,
     seed: 336699,
     shadow: true,
@@ -156,10 +156,10 @@ const FAMILIES: Family[] = [
       return { scale: new Vector3(rad, 0.03 + hash01(idx, 11) * 0.025, rad), lift: 0.016, spin: 0 }
     },
   },
-  // 6 — Oscillator crystals: faceted octahedra, reflective steel, sparse accents.
+  // 6 — Oscillator crystals: sparse faceted accents.
   {
     key: 'osc',
-    count: 700,
+    count: 18,
     flatness: 0.8,
     seed: 145263,
     shadow: true,
@@ -170,10 +170,10 @@ const FAMILIES: Family[] = [
       return { scale: new Vector3(s, s * 0.7, s), lift: 0.01, spin: hash01(idx, 5) * Math.PI }
     },
   },
-  // 7 — Heatsink fins: thin titanium plates, structural, catch shadow.
+  // 7 — Heatsink fins: sparse plates.
   {
     key: 'heatsink',
-    count: 560,
+    count: 15,
     flatness: 0.88,
     seed: 604020,
     shadow: true,
@@ -185,11 +185,11 @@ const FAMILIES: Family[] = [
       spin: hash01(idx, 13) * Math.PI,
     }),
   },
-  // 8 — Micro solder beads: the finest tier of fill, tucked into sulci everywhere.
+  // 8 — Micro solder beads: very sparse, only on flat areas.
   {
     key: 'bead',
-    count: 4200,
-    flatness: 0.5,
+    count: 30,
+    flatness: 0.65,
     seed: 987321,
     shadow: false,
     geometry: () => new OctahedronGeometry(1, 0),
@@ -225,7 +225,9 @@ export function SurfaceComponents({
 
     return FAMILIES.map((fam) => {
       const count = Math.max(1, Math.round(fam.count * budget))
-      const samples = sampleSurface(geometry, count, fam.seed, fam.flatness)
+      let samples = sampleSurface(geometry, count, fam.seed, fam.flatness)
+      // Brainstem (id 6) is thin/curved — keep only 20% of parts there.
+      samples = samples.filter((s, idx) => s.regionId !== 6 || idx % 5 === 0)
       const matrices: Matrix4[] = []
       samples.forEach((s, idx) => {
         const r = hash01(idx, fam.seed & 0xffff)

@@ -37,6 +37,13 @@ export function PanelLayer() {
         const sp = screenPoints[id]
         if (!panel || !path || !sp) continue
 
+        // The lobe's anchor is on the far side of the brain (rotated out of view) —
+        // hide the connector line and node entirely rather than drawing to a point
+        // that isn't actually visible on the model.
+        path.style.display = sp.visible ? '' : 'none'
+        if (node) node.style.display = sp.visible ? '' : 'none'
+        if (!sp.visible) continue
+
         const slot = slotForOrder(i)
         const r = panel.getBoundingClientRect()
         let ax: number
