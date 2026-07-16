@@ -247,6 +247,23 @@ _(2026-07-10)_ Executed `docs/modification 2.md` (feature-freeze art direction):
 - **Cost:** +2 instanced meshes, +1 trivial shader disc, +4 small meshes. No architecture
   change; tiers unaffected. Build clean, chunks unchanged.
 
+**M16 — EDA-grade routing, silkscreen, material split.** _(2026-07-10)_ The routing field
+now follows `circuit_reference.png`'s manufacturing topology:
+- **45°-dominant orientation set.** Cells route straight, on *both* 45° diagonals, or with
+  the EDA signature **mid-cell 45° jog** (a run that elbows at centre). Constant trace
+  width everywhere — never organic strokes.
+- **Parallel bus pairs.** ~30% of cells carry a companion trace at constant 3×-width
+  spacing — the parallel-routing signature of professional PCB layout (visible as the
+  multi-lane buses in the captures).
+- **Silkscreen inspection markings.** Sparse printed dashes and tiny pads on a fine 96×
+  grid (micro tier only, non-emissive, off-routing) — the "tiny engraved identifiers"
+  reward-on-zoom layer.
+- **Material differentiation.** Copper routing is now physically distinct from substrate:
+  polished (roughness → 0.32) and metallic (→ 0.9) via a metalness-chunk injection, while
+  bare graphite carries a faint **carbon-fiber cross-hatch** in its roughness. Trace
+  highlights now read as metal, not paint.
+- **Cost:** shader-only (cache v9). Build clean, chunks unchanged.
+
 ---
 
 ## Acceptance & audit
