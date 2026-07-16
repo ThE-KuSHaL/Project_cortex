@@ -35,9 +35,9 @@ export function Stage({ particleCount }: { particleCount: number }) {
         makeDefault
         enablePan={false}
         enableDamping
-        dampingFactor={0.06}
-        rotateSpeed={0.6}
-        zoomSpeed={0.7}
+        dampingFactor={0.045}
+        rotateSpeed={0.55}
+        zoomSpeed={0.65}
         minDistance={1.75}
         maxDistance={8}
         maxPolarAngle={Math.PI * 0.86}

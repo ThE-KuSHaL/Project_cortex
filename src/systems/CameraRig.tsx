@@ -37,7 +37,8 @@ export function CameraRig() {
       desired.y *= 0.5
     }
 
-    const k = 1 - Math.pow(0.06, Math.min(dt, 0.1))
+    // Softer, more cinematic settle (modification_02 camera polish) — never dramatic.
+    const k = 1 - Math.pow(0.1, Math.min(dt, 0.1))
     controls.target.lerp(desired, k * 0.5)
   })
 

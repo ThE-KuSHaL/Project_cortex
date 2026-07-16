@@ -264,6 +264,17 @@ now follows `circuit_reference.png`'s manufacturing topology:
   highlights now read as metal, not paint.
 - **Cost:** shader-only (cache v9). Build clean, chunks unchanged.
 
+**M17 — Power synchronization + camera polish.** _(2026-07-10)_ Final modification_02
+items:
+- **The platform powers the brain.** The brain's idle glow now lifts softly (+0.07) as
+  each conduit pulse *arrives* (`pow(fract(uTime*0.35), 6)` — sharp attack at cycle end,
+  same 0.35 Hz clock the mount conduit rides), so brain and pedestal visibly share one
+  power rhythm.
+- **Camera polish.** Softer orbit damping (0.06 → 0.045), slightly slower rotate/zoom
+  response, and a gentler focus-settle curve in the rig — cinematic, never dramatic. No
+  behavioural change to the camera system.
+- **Cost:** one shader term (cache v10) + three constants. Build clean, chunks unchanged.
+
 ---
 
 ## Acceptance & audit

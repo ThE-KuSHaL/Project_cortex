@@ -224,7 +224,11 @@ const FRAGMENT_METALNESS = /* glsl */ `
 const FRAGMENT_EMISSIVE = /* glsl */ `
   // Idle circuitry still glows (reference reads "live" even at rest), but stays well under
   // the activation ceiling so hovering/selecting remains a clear, dramatic step-up.
-  float cortexIdle = 0.34 + 0.16 * uBrainActivity;
+  // The platform powers the brain (modification_02): the base conduit travels upward on a
+  // 0.35 Hz clock; as each pulse ARRIVES (cycle end) the idle glow lifts softly, so the
+  // brain visibly breathes on the pedestal's power rhythm.
+  float cortexFeed = pow(fract(uTime * 0.35), 6.0);
+  float cortexIdle = 0.34 + 0.16 * uBrainActivity + cortexFeed * 0.07;
   float cortexActivation = mix(cortexIdle, 1.0, vActiveMix);
   vec3 cortexEmis = vRegionColor * (cortexLine * 0.62 + cortexPacket * 3.0) * cortexActivation * uEmissiveGain;
   cortexEmis += vec3(1.0) * pow(cortexPacket, 3.0) * cortexActivation * (1.15 + uSync * 0.6); // white hotspots
@@ -290,7 +294,7 @@ export function createBrainMaterial(): BrainMaterialBundle {
     }
   }
 
-  material.customProgramCacheKey = () => 'cortex-master-material-v9'
+  material.customProgramCacheKey = () => 'cortex-master-material-v10'
 
   return { material, uniforms }
 }
