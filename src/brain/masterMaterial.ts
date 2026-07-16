@@ -125,15 +125,29 @@ float cortexRoute(vec2 uv, float scale, float seed, float t, float width, float 
   float present = step(1.0 - density, cortexHash(id + seed + 3.3));
   if (present < 0.5) return 0.0;
 
+  // EDA-style orientation set (circuit_reference): straight runs, BOTH 45-degree
+  // diagonals, and the signature 45-degree jog (a run that elbows mid-cell). Constant
+  // trace width throughout — manufacturing logic, never organic strokes.
   float o = cortexHash(id + seed + 7.1);
   float d;
   float along;
-  if (o < 0.42) { d = abs(gv.y); along = gv.x; }
-  else if (o < 0.84) { d = abs(gv.x); along = gv.y; }
-  else { d = abs(gv.x - gv.y) * 0.70711; along = (gv.x + gv.y) * 0.70711; }
+  if (o < 0.30) { d = abs(gv.y); along = gv.x; }
+  else if (o < 0.60) { d = abs(gv.x); along = gv.y; }
+  else if (o < 0.74) { d = abs(gv.x - gv.y) * 0.70711; along = (gv.x + gv.y) * 0.70711; }
+  else if (o < 0.88) { d = abs(gv.x + gv.y) * 0.70711; along = (gv.x - gv.y) * 0.70711; }
+  else {
+    // 45° jog: horizontal run entering from the left that bends diagonally at centre.
+    d = (gv.x < 0.0) ? abs(gv.y) : abs(gv.x - gv.y) * 0.70711;
+    along = (gv.x < 0.0) ? gv.x : (gv.x + gv.y) * 0.70711;
+  }
 
   float aa = fwidth(d) + 0.004;
   float line = 1.0 - smoothstep(width, width + aa, d);
+
+  // Parallel bus pair on ~30% of cells: a companion trace at constant 3x-width spacing —
+  // the parallel-routing signature of professional PCB layout.
+  float pair = step(0.70, cortexHash(id + seed + 5.5));
+  line = max(line, pair * (1.0 - smoothstep(width, width + aa, abs(d - width * 3.0))));
 
   // via / pad at the cell centre — denser than before so zoom is rewarded with junctions
   float vr = length(gv);
@@ -173,11 +187,38 @@ const FRAGMENT_DIFFUSE = /* glsl */ `
   float cortexPacket = clamp(cortexPk1 + cortexPk2 * 0.72 + cortexPk3 * 0.5 + cortexPk4 * 0.35, 0.0, 1.0);
   vec3 cortexCopper = vec3(0.46, 0.23, 0.09);
   diffuseColor.rgb = mix(diffuseColor.rgb, cortexCopper, clamp(cortexLine * 0.80, 0.0, 0.80));
+
+  // Silkscreen inspection markings (modification_01/02 "tiny engraved identifiers"):
+  // sparse printed dashes + tiny squares on a fine grid, faint warm-white like component
+  // designators. Non-emissive, micro-tier only — pure reward-on-zoom.
+  if (uMicroDetail > 0.5) {
+    vec2 sp = vCortexUv * 96.0;
+    vec2 sid = floor(sp);
+    vec2 sgv = fract(sp) - 0.5;
+    float son = step(0.93, cortexHash(sid + 17.3));
+    float kind = cortexHash(sid + 23.7);
+    float mark;
+    if (kind < 0.6) {
+      mark = (1.0 - smoothstep(0.28, 0.33, abs(sgv.x))) * (1.0 - smoothstep(0.05, 0.09, abs(sgv.y))); // dash
+    } else {
+      mark = (1.0 - smoothstep(0.10, 0.15, max(abs(sgv.x), abs(sgv.y)))); // tiny square pad
+    }
+    diffuseColor.rgb += vec3(0.55, 0.58, 0.52) * son * mark * 0.16 * (1.0 - cortexLine);
+  }
 `
 
 const FRAGMENT_ROUGHNESS = /* glsl */ `
+  // Machined micro-variation on the graphite, PLUS material differentiation: copper
+  // routing is smoother/more reflective than substrate (metal vs matte), and a subtle
+  // carbon-fiber weave modulates the bare substrate's roughness in a fine cross-hatch.
   float cortexRough = cortexNoise(vObjPos * 42.0);
-  roughnessFactor = clamp(roughnessFactor + (cortexRough - 0.5) * 0.14, 0.06, 1.0);
+  float cortexWeave = sin(vCortexUv.x * 620.0) * sin(vCortexUv.y * 620.0); // CF cross-hatch
+  roughnessFactor = clamp(roughnessFactor + (cortexRough - 0.5) * 0.14 + cortexWeave * 0.03, 0.06, 1.0);
+  roughnessFactor = mix(roughnessFactor, 0.32, cortexLine * 0.8); // copper: polished
+`
+
+const FRAGMENT_METALNESS = /* glsl */ `
+  metalnessFactor = mix(metalnessFactor, 0.9, cortexLine * 0.85); // copper: metallic
 `
 
 const FRAGMENT_EMISSIVE = /* glsl */ `
@@ -242,13 +283,14 @@ export function createBrainMaterial(): BrainMaterialBundle {
         .replace('#include <common>', `#include <common>\n${FRAGMENT_HEAD}`)
         .replace('#include <map_fragment>', `#include <map_fragment>\n${FRAGMENT_DIFFUSE}`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${FRAGMENT_ROUGHNESS}`)
+        .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${FRAGMENT_METALNESS}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`)
     } catch (err) {
       console.error('[Project Cortex] shader patch failed — falling back to standard PBR:', err)
     }
   }
 
-  material.customProgramCacheKey = () => 'cortex-master-material-v8'
+  material.customProgramCacheKey = () => 'cortex-master-material-v9'
 
   return { material, uniforms }
 }
