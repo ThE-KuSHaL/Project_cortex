@@ -226,6 +226,27 @@ as the doc itself directs ("nothing runs until a mode is actually built").
 M1–M7; reference specs art-directed in M8–M13; acceptance (13) executed in M14; future
 roadmap (14) satisfied at the architecture level.
 
+**M15 — modification_02: hover fix, computational packets, laboratory pedestal.**
+_(2026-07-10)_ Executed `docs/modification 2.md` (feature-freeze art direction):
+- **Hover defect fixed with a boost clock.** Hover previously accelerated packets via a
+  time-multiplier, which bursts on transition then visually fades. Packets now advance on
+  a per-region clock `uTime + uBoost[region]`; while hovered the CPU advances that
+  region's clock faster (+45%, select +60%) so cadence stays elevated for the **entire**
+  hover and eases back only on exit. Acceleration ~50% of the old value — confident, not
+  aggressive.
+- **Computational packets.** A second asynchronous priority lane (~⅓ of cells, 1.8×
+  speed, offset phase) breaks synchronization — traffic reads as scheduled computation.
+- **Laboratory pedestal (5 layers).** Graphite structural base → brushed-titanium primary
+  ring with 72 machined radial grooves (instanced, 1 draw call) → procedural **PCB circuit
+  disc** (concentric buses, radial traces, vias, 9 async blinking status LEDs — one cheap
+  shader, zero extra draw calls) → recessed cyan energy ring → calibration ring with 120
+  engraved ticks (instanced) + a slow 24s holographic sweep arc.
+- **Powered mount.** The stem is now a segmented assembly (titanium collar → carbon column
+  → titanium neck) with an emissive **power conduit ring that travels upward** on the pulse
+  clock — the platform visibly powers the brain.
+- **Cost:** +2 instanced meshes, +1 trivial shader disc, +4 small meshes. No architecture
+  change; tiers unaffected. Build clean, chunks unchanged.
+
 ---
 
 ## Acceptance & audit

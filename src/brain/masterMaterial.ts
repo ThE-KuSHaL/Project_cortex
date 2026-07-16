@@ -27,6 +27,11 @@ export interface BrainUniforms {
   uColors: IUniform<Float32Array>
   uActive: IUniform<Float32Array>
   uHover: IUniform<Float32Array>
+  /** Per-region accumulated packet-boost clock (seconds of extra phase). Advancing this
+   * faster while a region is hovered/selected raises packet cadence SUSTAINABLY — unlike
+   * multiplying uTime by a time-varying speed, which bursts on transition then appears
+   * to fade (the modification_02 hover defect). */
+  uBoost: IUniform<Float32Array>
   uBrainActivity: IUniform<number>
   uSync: IUniform<number>
   uEmissiveGain: IUniform<number>
@@ -53,8 +58,10 @@ attribute float aRegionId;
 uniform vec3 uColors[${REGION_COUNT}];
 uniform float uActive[${REGION_COUNT}];
 uniform float uHover[${REGION_COUNT}];
+uniform float uBoost[${REGION_COUNT}];
 varying vec3 vRegionColor;
 varying float vActiveMix;
+varying float vBoost;
 varying vec2 vCortexUv;
 varying vec3 vObjPos;
 `
@@ -63,6 +70,7 @@ const VERTEX_BODY = /* glsl */ `
   int cortexRegion = int(aRegionId + 0.5);
   vRegionColor = uColors[cortexRegion];
   vActiveMix = clamp(uActive[cortexRegion] + uHover[cortexRegion] * 0.6, 0.0, 1.0);
+  vBoost = uBoost[cortexRegion];
   vCortexUv = uv;
   vObjPos = position;
 `
@@ -75,6 +83,7 @@ uniform float uEmissiveGain;
 uniform float uMicroDetail;
 varying vec3 vRegionColor;
 varying float vActiveMix;
+varying float vBoost;
 varying vec2 vCortexUv;
 varying vec3 vObjPos;
 
@@ -131,13 +140,18 @@ float cortexRoute(vec2 uv, float scale, float seed, float t, float width, float 
   float via = (1.0 - smoothstep(0.052, 0.052 + fwidth(vr) + 0.004, vr)) * step(0.58, cortexHash(id + seed + 9.9));
   line = max(line, via);
 
-  // Travelling packet. Cadence rises with global activity AND locally with this region's
-  // own activation (vActiveMix = hover + select) — so hovering a lobe visibly quickens its
-  // own packets (docs/07 / reference_ui "hover increases packet activity") right where the
-  // user is looking, not just as a scene-wide average.
-  float speed = (0.14 + 0.5 * cortexHash(id + seed + 1.3)) * (1.0 + uBrainActivity * 0.5 + vActiveMix * 0.9);
+  // Travelling packets. Phase advances on the region's own boost clock (t = uTime +
+  // vBoost): while a region is hovered/selected the CPU advances its clock faster, so
+  // cadence stays elevated for the ENTIRE hover — no burst-then-fade (modification_02).
+  // Two asynchronous lanes per cell — a primary packet and a faster, dimmer priority
+  // packet on a different hash phase — so movement never reads as synchronized.
+  float speed = (0.14 + 0.5 * cortexHash(id + seed + 1.3)) * (1.0 + uBrainActivity * 0.35);
   float phase = fract(along + 0.5 - t * speed + cortexHash(id + seed));
   pk = line * (1.0 - smoothstep(0.05, 0.12, abs(phase - 0.5)));
+  // Priority lane: present on ~1/3 of cells, 1.8x speed, offset phase.
+  float lane2 = step(0.67, cortexHash(id + seed + 7.7));
+  float phase2 = fract(along - t * speed * 1.8 + cortexHash(id + seed + 4.2));
+  pk = max(pk, line * lane2 * 0.65 * (1.0 - smoothstep(0.04, 0.1, abs(phase2 - 0.5))));
   return line;
 }
 `
@@ -147,10 +161,13 @@ const FRAGMENT_DIFFUSE = /* glsl */ `
   // before read as fabricated circuitry rather than wide ribbons; the 4th (finest) octave
   // is the reward-on-zoom layer and is skipped on the lowest tier only.
   float cortexPk1, cortexPk2, cortexPk3, cortexPk4;
-  float cl1 = cortexRoute(vCortexUv, 7.0, 1.0, uTime, 0.028, 0.52, cortexPk1);
-  float cl2 = cortexRoute(vCortexUv, 16.0, 13.0, uTime, 0.020, 0.62, cortexPk2);
-  float cl3 = cortexRoute(vCortexUv, 34.0, 27.0, uTime, 0.014, 0.72, cortexPk3);
-  float cl4 = uMicroDetail > 0.5 ? cortexRoute(vCortexUv, 72.0, 41.0, uTime, 0.010, 0.80, cortexPk4) : 0.0;
+  // Region-local packet clock: uTime plus this region's accumulated boost. Advancing the
+  // boost faster during hover/select keeps cadence elevated for the whole interaction.
+  float cortexT = uTime + vBoost;
+  float cl1 = cortexRoute(vCortexUv, 7.0, 1.0, cortexT, 0.028, 0.52, cortexPk1);
+  float cl2 = cortexRoute(vCortexUv, 16.0, 13.0, cortexT, 0.020, 0.62, cortexPk2);
+  float cl3 = cortexRoute(vCortexUv, 34.0, 27.0, cortexT, 0.014, 0.72, cortexPk3);
+  float cl4 = uMicroDetail > 0.5 ? cortexRoute(vCortexUv, 72.0, 41.0, cortexT, 0.010, 0.80, cortexPk4) : 0.0;
   if (uMicroDetail <= 0.5) cortexPk4 = 0.0;
   float cortexLine = clamp(cl1 + cl2 * 0.78 + cl3 * 0.55 + cl4 * 0.4, 0.0, 1.0);
   float cortexPacket = clamp(cortexPk1 + cortexPk2 * 0.72 + cortexPk3 * 0.5 + cortexPk4 * 0.35, 0.0, 1.0);
@@ -186,6 +203,7 @@ export function createBrainMaterial(): BrainMaterialBundle {
     uColors: { value: packColors() },
     uActive: { value: new Float32Array(REGION_COUNT) },
     uHover: { value: new Float32Array(REGION_COUNT) },
+    uBoost: { value: new Float32Array(REGION_COUNT) },
     uBrainActivity: { value: 0 },
     uSync: { value: 0 },
     uEmissiveGain: { value: 1 },
@@ -210,6 +228,7 @@ export function createBrainMaterial(): BrainMaterialBundle {
       shader.uniforms.uColors = uniforms.uColors
       shader.uniforms.uActive = uniforms.uActive
       shader.uniforms.uHover = uniforms.uHover
+      shader.uniforms.uBoost = uniforms.uBoost
       shader.uniforms.uBrainActivity = uniforms.uBrainActivity
       shader.uniforms.uSync = uniforms.uSync
       shader.uniforms.uEmissiveGain = uniforms.uEmissiveGain
@@ -229,7 +248,7 @@ export function createBrainMaterial(): BrainMaterialBundle {
     }
   }
 
-  material.customProgramCacheKey = () => 'cortex-master-material-v7'
+  material.customProgramCacheKey = () => 'cortex-master-material-v8'
 
   return { material, uniforms }
 }

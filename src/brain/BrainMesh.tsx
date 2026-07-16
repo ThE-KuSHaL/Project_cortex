@@ -95,12 +95,14 @@ export function BrainMesh() {
       g.scale.setScalar(1 + Math.sin(t * 0.8) * 0.006 * motion)
     }
 
-    // Interaction choreography (docs/07 + reference_ui): hover is a light, immediate touch;
-    // selection "deploys" — a deliberate, weightier power-up that never pops. Two easing
-    // rates, not one, so the two gestures feel distinct.
+    // Interaction choreography (docs/07 + modification_02): hover is a confident, held
+    // state; selection "deploys" — deliberate, never pops. Packet cadence uses a per-region
+    // BOOST CLOCK: while hovered/selected the region's clock advances faster, so packets
+    // stay quick for the entire interaction (no burst-then-fade), easing back only on exit.
     const s = useCortex.getState()
-    const kHover = 1 - Math.pow(0.0008, dt) // snappy: ~0.1s to settle
+    const kHover = 1 - Math.pow(0.004, dt) // confident ease (~0.15s), holds while inside
     const kSelect = 1 - Math.pow(0.02, dt) // deliberate deploy: ~0.28s
+    const boost = uniforms.uBoost.value
     let target = 0
     for (let i = 0; i < REGION_COUNT; i++) {
       const ta = s.selected.includes(i) ? 1 : 0
@@ -109,6 +111,8 @@ export function BrainMesh() {
       hoverEase.current[i] += (th - hoverEase.current[i]) * kHover
       uniforms.uActive.value[i] = activeEase.current[i]
       uniforms.uHover.value[i] = hoverEase.current[i]
+      // Sustained cadence: hover ≈ +45% packet speed, select ≈ +60%, additive per region.
+      boost[i] += dt * (hoverEase.current[i] * 0.45 + activeEase.current[i] * 0.6) * motion
       target += ta
     }
     uniforms.uBrainActivity.value += (target / REGION_COUNT - uniforms.uBrainActivity.value) * kSelect
