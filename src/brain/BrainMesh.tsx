@@ -111,8 +111,9 @@ export function BrainMesh() {
       hoverEase.current[i] += (th - hoverEase.current[i]) * kHover
       uniforms.uActive.value[i] = activeEase.current[i]
       uniforms.uHover.value[i] = hoverEase.current[i]
-      // Sustained cadence: hover ≈ +45% packet speed, select ≈ +60%, additive per region.
-      boost[i] += dt * (hoverEase.current[i] * 0.45 + activeEase.current[i] * 0.6) * motion
+      // Sustained cadence (+40% over the M15 values so hover reads clearly distinct from
+      // idle at a glance): hover ≈ +63% packet speed, select ≈ +84%, additive per region.
+      boost[i] += dt * (hoverEase.current[i] * 0.63 + activeEase.current[i] * 0.84) * motion
       target += ta
     }
     uniforms.uBrainActivity.value += (target / REGION_COUNT - uniforms.uBrainActivity.value) * kSelect

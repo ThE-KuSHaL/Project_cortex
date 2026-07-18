@@ -275,6 +275,23 @@ items:
   behavioural change to the camera system.
 - **Cost:** one shader term (cache v10) + three constants. Build clean, chunks unchanged.
 
+**M18 — Hover cadence +40% and card-click focus flight.** _(2026-07-10)_
+- **Hover vs idle now unmistakable.** The sustained boost-clock rates rose 40% (hover
+  0.45 → 0.63, select 0.6 → 0.84): packets in a hovered region run visibly quicker than
+  idle for the entire hover, still controlled.
+- **Click a knowledge card → the brain turns to you.** Clicking a card's body (not its ×)
+  sets `focusRegion`; the CameraRig flies the camera to that region's **optimal viewing
+  angle** — along the region's outward normal in *world* space, recomputed every frame so
+  the flight tracks the brain's live idle rotation. Orbit distance is preserved (no zoom
+  jump), the flight respects the polar clamps (can't dive under the floor for
+  brainstem/cerebellum), the orbit target eases onto the region simultaneously
+  (re-centering), and **any user orbit gesture cancels the flight instantly** — the user
+  always wins. Cards show a pointer cursor + accent-brightening hover so the affordance
+  is discoverable; the × still only closes (stopPropagation).
+- Verified live with a puppeteer DOM-click test: flight executes, panel stays open, zero
+  page errors.
+- **Cost:** one store field, one rig branch, one CSS rule. No architecture change.
+
 ---
 
 ## Acceptance & audit

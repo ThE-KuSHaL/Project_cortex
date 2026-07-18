@@ -16,18 +16,35 @@ export function KnowledgePanel({
   slot,
   panelRef,
   onClose,
+  onFocus,
 }: {
   region: Region
   palette: RegionPalette
   slot: Slot
   panelRef: (el: HTMLDivElement | null) => void
   onClose: () => void
+  /** Clicking the card flies the camera to this region's optimal viewing angle. */
+  onFocus?: () => void
 }) {
   return (
     <div ref={panelRef} className="panel-slot" data-side={slot.side} style={slot.style}>
-      <div className="panel" style={{ ['--accent' as string]: palette.primary }} role="group" aria-label={`${region.knowledge} knowledge region`}>
+      <div
+        className="panel"
+        style={{ ['--accent' as string]: palette.primary }}
+        role="group"
+        aria-label={`${region.knowledge} knowledge region`}
+        onClick={onFocus}
+        title={onFocus ? `View ${region.name} on the brain` : undefined}
+      >
         <span className="panel__edge" aria-hidden="true" />
-        <button className="panel__close" onClick={onClose} aria-label="Close panel">
+        <button
+          className="panel__close"
+          onClick={(e) => {
+            e.stopPropagation() // closing must never trigger a focus flight
+            onClose()
+          }}
+          aria-label="Close panel"
+        >
           ×
         </button>
         <div className="panel__head">

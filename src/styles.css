@@ -203,6 +203,15 @@ canvas { display: block; touch-action: none; outline: none; }
   transform-origin: center;
   animation: cortex-deploy 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   animation-delay: 0.12s;
+  cursor: pointer; /* clicking the card flies the camera to its region */
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow:
+    0 12px 42px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 30px -8px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 @keyframes cortex-deploy {
   from { opacity: 0; transform: translateY(14px) scale(0.965); }

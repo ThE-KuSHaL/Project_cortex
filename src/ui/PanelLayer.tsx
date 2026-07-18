@@ -16,6 +16,7 @@ import { useMediaQuery } from './useMediaQuery'
 export function PanelLayer() {
   const selected = useCortex((s) => s.selected)
   const toggleSelected = useCortex((s) => s.toggleSelected)
+  const requestFocus = useCortex((s) => s.requestFocus)
   const compact = useMediaQuery('(max-width: 720px)')
 
   const panelRefs = useRef(new Map<number, HTMLDivElement>())
@@ -123,6 +124,7 @@ export function PanelLayer() {
           slot={slotForOrder(order)}
           panelRef={(el) => registerRef(panelRefs, id, el)}
           onClose={() => toggleSelected(id)}
+          onFocus={() => requestFocus(id)}
         />
       ))}
     </>

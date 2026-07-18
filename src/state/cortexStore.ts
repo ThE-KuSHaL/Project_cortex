@@ -17,11 +17,16 @@ interface CortexState {
   ready: boolean
   hovered: number | null
   selected: number[]
+  /** Region the camera should fly to for its optimal viewing angle (set by clicking a
+   * knowledge card). Consumed + cleared by the CameraRig; cancelled by user orbit. */
+  focusRegion: number | null
   phase: InteractionPhase
 
   setReady: (v: boolean) => void
   setHovered: (id: number | null) => void
   toggleSelected: (id: number) => void
+  requestFocus: (id: number) => void
+  clearFocus: () => void
   clearSelection: () => void
   isSelected: (id: number) => boolean
   activeCount: () => number
@@ -31,6 +36,7 @@ export const useCortex = create<CortexState>((set, get) => ({
   ready: false,
   hovered: null,
   selected: [],
+  focusRegion: null,
   phase: 'dormant',
 
   setReady: (v) => set({ ready: v, phase: v ? 'idle' : 'dormant' }),
@@ -39,9 +45,15 @@ export const useCortex = create<CortexState>((set, get) => ({
     set((s) => {
       if (id < 0 || id >= REGION_COUNT) return s
       const has = s.selected.includes(id)
-      return { selected: has ? s.selected.filter((x) => x !== id) : [...s.selected, id] }
+      return {
+        selected: has ? s.selected.filter((x) => x !== id) : [...s.selected, id],
+        // Closing a region's panel also cancels any pending camera focus on it.
+        focusRegion: has && s.focusRegion === id ? null : s.focusRegion,
+      }
     }),
-  clearSelection: () => set({ selected: [] }),
+  requestFocus: (id) => set({ focusRegion: id >= 0 && id < REGION_COUNT ? id : null }),
+  clearFocus: () => set({ focusRegion: null }),
+  clearSelection: () => set({ selected: [], focusRegion: null }),
   isSelected: (id) => get().selected.includes(id),
   activeCount: () => get().selected.length,
 }))
