@@ -292,6 +292,22 @@ items:
   page errors.
 - **Cost:** one store field, one rig branch, one CSS rule. No architecture change.
 
+**M19 — circuit_reference wiring topology + final modification_02 garnish.** _(2026-07-10)_
+- **Routing rewritten to the reference's actual pattern.** Gone is the per-cell random
+  orientation field; `cortexRoute` now generates **long continuous traces in parallel lane
+  bundles** driven by a per-column lane-offset field — whole bundles jog together at
+  *exactly* 45° where the offset steps, nets start/stop over long hash-gated segments,
+  and each net terminates in a **round pad** (the reference's endpoint dots). Octaves
+  1/3 flow horizontally, 2/4 vertically (uv swapped) so the four board layers cross
+  orthogonally like a real multilayer PCB. Shader cache v11.
+- **Platform chip population.** 64 IC/QFN/passive packages (dark ceramic, instanced)
+  seated on the circuit disc; 12 recessed hex screw heads around the base rim; a 16-bar
+  bar-code maintenance label near the disc edge. Three instanced meshes — 3 draw calls.
+- **Occasional scanning line + holographic dust.** The atmosphere sphere now carries a
+  very faint cyan scan band sweeping up the backdrop once per ~9s cycle and sparse static
+  data points — restrained, below bloom, never competing with the brain.
+- **Cost:** shader edits + 3 instanced meshes. Build clean, chunks unchanged.
+
 ---
 
 ## Acceptance & audit

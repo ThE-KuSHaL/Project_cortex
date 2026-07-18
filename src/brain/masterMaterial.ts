@@ -112,76 +112,75 @@ float cortexNoise(vec3 x) {
     f.z);
 }
 
-// One layer of engineered routing on a cell grid: each populated cell carries a
-// horizontal, vertical or 45-degree bus with a via, and a packet travelling along it.
-// density (0..1) is the fraction of populated cells: coarse octaves stay sparse and
-// bold (readable bus structure), fine octaves pack in as fabrication texture so the
-// substrate reads "almost no empty areas" up close without flooding it with colour.
+// One layer of EDA routing modelled directly on circuit_reference.png: LONG continuous
+// traces running as parallel lane bundles, the WHOLE bundle jogging together at exactly
+// 45 degrees where the lane-offset field steps between columns, per-segment occupancy so
+// nets start/stop like real routing, and round terminal pads (the reference's dots)
+// where a net ends. No per-cell random orientation — flow is coherent across the field.
 float cortexRoute(vec2 uv, float scale, float seed, float t, float width, float density, out float pk) {
   pk = 0.0;
   vec2 p = uv * scale;
-  vec2 id = floor(p);
-  vec2 gv = fract(p) - 0.5;
-  float present = step(1.0 - density, cortexHash(id + seed + 3.3));
-  if (present < 0.5) return 0.0;
+  float x = p.x;
 
-  // EDA-style orientation set (circuit_reference): straight runs, BOTH 45-degree
-  // diagonals, and the signature 45-degree jog (a run that elbows mid-cell). Constant
-  // trace width throughout — manufacturing logic, never organic strokes.
-  float o = cortexHash(id + seed + 7.1);
-  float d;
-  float along;
-  if (o < 0.30) { d = abs(gv.y); along = gv.x; }
-  else if (o < 0.60) { d = abs(gv.x); along = gv.y; }
-  else if (o < 0.74) { d = abs(gv.x - gv.y) * 0.70711; along = (gv.x + gv.y) * 0.70711; }
-  else if (o < 0.88) { d = abs(gv.x + gv.y) * 0.70711; along = (gv.x - gv.y) * 0.70711; }
-  else {
-    // 45° jog: horizontal run entering from the left that bends diagonally at centre.
-    d = (gv.x < 0.0) ? abs(gv.y) : abs(gv.x - gv.y) * 0.70711;
-    along = (gv.x < 0.0) ? gv.x : (gv.x + gv.y) * 0.70711;
-  }
+  // Lane-offset field: constant per column (long straight runs), ramping between
+  // columns at EXACTLY 45 deg (slope +/-1), so neighbouring traces jog in parallel.
+  float colW = 4.0;
+  float c = floor(x / colW);
+  float xc = fract(x / colW) * colW;
+  float n0 = floor(cortexHash(vec2(c, seed)) * 5.0);
+  float n1 = floor(cortexHash(vec2(c + 1.0, seed)) * 5.0);
+  float d45 = n1 - n0;
+  float ramp = clamp(xc - (colW - abs(d45)), 0.0, abs(d45));
+  float off = n0 + sign(d45) * ramp;
 
-  float aa = fwidth(d) + 0.004;
-  float line = 1.0 - smoothstep(width, width + aa, d);
+  float yy = p.y - off;
+  float lane = floor(yy);
+  float fy = fract(yy) - 0.5;
 
-  // Parallel bus pair on ~30% of cells: a companion trace at constant 3x-width spacing —
-  // the parallel-routing signature of professional PCB layout.
-  float pair = step(0.70, cortexHash(id + seed + 5.5));
-  line = max(line, pair * (1.0 - smoothstep(width, width + aa, abs(d - width * 3.0))));
+  // Per-segment net occupancy: each lane carries its trace over long hash-gated runs.
+  float segLen = 7.0 + 4.0 * cortexHash(vec2(lane, seed + 2.2));
+  float sgi = floor(x / segLen);
+  float occ  = step(1.0 - density, cortexHash(vec2(lane, sgi + seed * 0.7)));
+  float occL = step(1.0 - density, cortexHash(vec2(lane, sgi - 1.0 + seed * 0.7)));
 
-  // via / pad at the cell centre — denser than before so zoom is rewarded with junctions
-  float vr = length(gv);
-  float via = (1.0 - smoothstep(0.052, 0.052 + fwidth(vr) + 0.004, vr)) * step(0.58, cortexHash(id + seed + 9.9));
-  line = max(line, via);
+  float aa = fwidth(fy) + 0.004;
+  float line = occ * (1.0 - smoothstep(width, width + aa, abs(fy)));
 
-  // Travelling packets. Phase advances on the region's own boost clock (t = uTime +
-  // vBoost): while a region is hovered/selected the CPU advances its clock faster, so
-  // cadence stays elevated for the ENTIRE hover — no burst-then-fade (modification_02).
-  // Two asynchronous lanes per cell — a primary packet and a faster, dimmer priority
-  // packet on a different hash phase — so movement never reads as synchronized.
+  // Round terminal pad where a net begins or ends — the reference's endpoint dots.
+  float xb = sgi * segLen;
+  float ends = abs(occ - occL);
+  float pd = length(vec2(x - xb, fy));
+  float pad = ends * (1.0 - smoothstep(width * 3.2, width * 3.2 + fwidth(pd) + 0.004, pd));
+  line = max(line, pad);
+
+  // Travelling packets on the region's boost clock (t = uTime + vBoost): sustained
+  // hover/select cadence (modification_02) with an async priority lane so movement
+  // never reads as synchronized.
+  vec2 id = vec2(lane, sgi);
+  float along = x * 0.30;
   float speed = (0.14 + 0.5 * cortexHash(id + seed + 1.3)) * (1.0 + uBrainActivity * 0.35);
   float phase = fract(along + 0.5 - t * speed + cortexHash(id + seed));
-  pk = line * (1.0 - smoothstep(0.05, 0.12, abs(phase - 0.5)));
-  // Priority lane: present on ~1/3 of cells, 1.8x speed, offset phase.
+  pk = line * occ * (1.0 - smoothstep(0.05, 0.12, abs(phase - 0.5)));
   float lane2 = step(0.67, cortexHash(id + seed + 7.7));
   float phase2 = fract(along - t * speed * 1.8 + cortexHash(id + seed + 4.2));
-  pk = max(pk, line * lane2 * 0.65 * (1.0 - smoothstep(0.04, 0.1, abs(phase2 - 0.5))));
+  pk = max(pk, line * occ * lane2 * 0.65 * (1.0 - smoothstep(0.04, 0.1, abs(phase2 - 0.5))));
   return line;
 }
 `
 
 const FRAGMENT_DIFFUSE = /* glsl */ `
-  // Four routing octaves: a macro bus layer down to fine PCB traces. Thinner widths than
-  // before read as fabricated circuitry rather than wide ribbons; the 4th (finest) octave
-  // is the reward-on-zoom layer and is skipped on the lowest tier only.
+  // Four routing octaves = four board layers. Octaves 1/3 flow horizontally, 2/4
+  // vertically (uv swapped) so layers cross orthogonally with 45-degree jogs — the
+  // multilayer topology of circuit_reference.png. The finest octave is the
+  // reward-on-zoom layer and is skipped on the lowest tier only.
   float cortexPk1, cortexPk2, cortexPk3, cortexPk4;
   // Region-local packet clock: uTime plus this region's accumulated boost. Advancing the
   // boost faster during hover/select keeps cadence elevated for the whole interaction.
   float cortexT = uTime + vBoost;
-  float cl1 = cortexRoute(vCortexUv, 7.0, 1.0, cortexT, 0.028, 0.52, cortexPk1);
-  float cl2 = cortexRoute(vCortexUv, 16.0, 13.0, cortexT, 0.020, 0.62, cortexPk2);
-  float cl3 = cortexRoute(vCortexUv, 34.0, 27.0, cortexT, 0.014, 0.72, cortexPk3);
-  float cl4 = uMicroDetail > 0.5 ? cortexRoute(vCortexUv, 72.0, 41.0, cortexT, 0.010, 0.80, cortexPk4) : 0.0;
+  float cl1 = cortexRoute(vCortexUv, 7.0, 1.0, cortexT, 0.028, 0.42, cortexPk1);
+  float cl2 = cortexRoute(vCortexUv.yx, 16.0, 13.0, cortexT, 0.020, 0.48, cortexPk2);
+  float cl3 = cortexRoute(vCortexUv, 34.0, 27.0, cortexT, 0.014, 0.55, cortexPk3);
+  float cl4 = uMicroDetail > 0.5 ? cortexRoute(vCortexUv.yx, 72.0, 41.0, cortexT, 0.010, 0.62, cortexPk4) : 0.0;
   if (uMicroDetail <= 0.5) cortexPk4 = 0.0;
   float cortexLine = clamp(cl1 + cl2 * 0.78 + cl3 * 0.55 + cl4 * 0.4, 0.0, 1.0);
   float cortexPacket = clamp(cortexPk1 + cortexPk2 * 0.72 + cortexPk3 * 0.5 + cortexPk4 * 0.35, 0.0, 1.0);
@@ -294,7 +293,7 @@ export function createBrainMaterial(): BrainMaterialBundle {
     }
   }
 
-  material.customProgramCacheKey = () => 'cortex-master-material-v10'
+  material.customProgramCacheKey = () => 'cortex-master-material-v11'
 
   return { material, uniforms }
 }

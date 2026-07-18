@@ -4,6 +4,7 @@ import {
   AdditiveBlending,
   BoxGeometry,
   Color,
+  CylinderGeometry,
   DoubleSide,
   InstancedMesh,
   Matrix4,
@@ -111,9 +112,17 @@ export function BasePlatform() {
   const conduitMat = useRef<MeshStandardMaterial>(null)
   const circuitMat = useMemo(makeCircuitDiscMaterial, [])
 
-  // Machined radial grooves (L2) + calibration ticks (L5) — two instanced meshes.
-  const { grooveGeo, grooveMat, grooveMatrices, tickGeo, tickMat, tickMatrices } = useMemo(() => {
+  // Machined radial grooves (L2) + calibration ticks (L5) + chip population + hex screws
+  // + a bar-code maintenance label — five instanced meshes, one draw call each.
+  const { grooveGeo, grooveMat, grooveMatrices, tickGeo, tickMat, tickMatrices, chipGeo, chipMat, chipMatrices, screwGeo, screwMat, screwMatrices, barGeo, barMat, barMatrices } = useMemo(() => {
     const obj = new Object3D()
+    const h = (i: number, s: number) => {
+      let x = (i * 2654435761 + s * 40503) >>> 0
+      x ^= x >>> 15
+      x = Math.imul(x, 0x2c1b3c6d)
+      x ^= x >>> 12
+      return (x >>> 0) / 4294967296
+    }
     const grooves: Matrix4[] = []
     for (let i = 0; i < 72; i++) {
       const a = (i / 72) * TAU
@@ -133,6 +142,39 @@ export function BasePlatform() {
       obj.updateMatrix()
       ticks.push(obj.matrix.clone())
     }
+    // Chip population (modification_02): IC/QFN/passive packages seated on the circuit
+    // disc between the mount collar and the energy ring. Subtle — dark ceramic.
+    const chips: Matrix4[] = []
+    for (let i = 0; i < 64; i++) {
+      const a = h(i, 11) * TAU
+      const r = 0.42 + h(i, 22) * 0.64 // clear of the collar (0.32) and energy ring (1.15)
+      const big = h(i, 33) > 0.8
+      obj.position.set(Math.cos(a) * r, 0.088, Math.sin(a) * r)
+      obj.rotation.set(0, h(i, 44) > 0.5 ? -a : -a + Math.PI / 4, 0)
+      obj.scale.set(big ? 0.05 + h(i, 55) * 0.04 : 0.014 + h(i, 55) * 0.02, big ? 0.012 : 0.007, big ? 0.05 + h(i, 66) * 0.03 : 0.012 + h(i, 66) * 0.018)
+      obj.updateMatrix()
+      chips.push(obj.matrix.clone())
+    }
+    // Hex screw heads recessed into the base rim.
+    const screws: Matrix4[] = []
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU + 0.13
+      obj.position.set(Math.cos(a) * 1.62, 0.081, Math.sin(a) * 1.62)
+      obj.rotation.set(0, h(i, 77) * TAU, 0)
+      obj.scale.set(0.016, 0.005, 0.016)
+      obj.updateMatrix()
+      screws.push(obj.matrix.clone())
+    }
+    // Bar-code maintenance label: a short arc of thin bars near the disc edge.
+    const bars: Matrix4[] = []
+    for (let i = 0; i < 16; i++) {
+      const a = 0.42 + i * 0.016
+      obj.position.set(Math.cos(a) * 1.34, 0.088, Math.sin(a) * 1.34)
+      obj.rotation.set(0, -a, 0)
+      obj.scale.set(0.004 + h(i, 88) * 0.006, 0.003, 0.03)
+      obj.updateMatrix()
+      bars.push(obj.matrix.clone())
+    }
     return {
       grooveGeo: new BoxGeometry(1, 1, 1),
       grooveMat: new MeshStandardMaterial({ color: new Color('#20262e'), metalness: 0.85, roughness: 0.3 }),
@@ -146,6 +188,15 @@ export function BasePlatform() {
         roughness: 0.5,
       }),
       tickMatrices: ticks,
+      chipGeo: new BoxGeometry(1, 1, 1),
+      chipMat: new MeshStandardMaterial({ color: new Color('#2b323c'), metalness: 0.5, roughness: 0.55 }),
+      chipMatrices: chips,
+      screwGeo: new CylinderGeometry(1, 1, 1, 6),
+      screwMat: new MeshStandardMaterial({ color: new Color('#454f5c'), metalness: 0.9, roughness: 0.35 }),
+      screwMatrices: screws,
+      barGeo: new BoxGeometry(1, 1, 1),
+      barMat: new MeshStandardMaterial({ color: new Color('#8a939e'), metalness: 0.2, roughness: 0.6 }),
+      barMatrices: bars,
     }
   }, [])
 
@@ -195,6 +246,13 @@ export function BasePlatform() {
       <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, 0]} material={circuitMat}>
         <circleGeometry args={[1.45, 96]} />
       </mesh>
+
+      {/* Chip population, hex screws, bar-code maintenance label (modification_02
+          "micro electronic components / micro screws / maintenance labels") — three
+          instanced meshes, one draw call each. */}
+      <instancedMesh ref={setInst(chipMatrices)} args={[chipGeo, chipMat, chipMatrices.length]} frustumCulled={false} />
+      <instancedMesh ref={setInst(screwMatrices)} args={[screwGeo, screwMat, screwMatrices.length]} frustumCulled={false} />
+      <instancedMesh ref={setInst(barMatrices)} args={[barGeo, barMat, barMatrices.length]} frustumCulled={false} />
 
       {/* L4 — recessed energy ring (bloom-eligible), soft cyan, slow pulse */}
       <mesh position={[0, 0.11, 0]} rotation={[-Math.PI / 2, 0, 0]}>
